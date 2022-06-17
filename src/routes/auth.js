@@ -6,6 +6,8 @@ function tmp(req, res) {};
 
 router.post('/signup', controllers.auth.signup);
 router.post('/login', controllers.auth.login);
+router.post('/super-admin-signup', controllers.auth.superAdminSignup);
+router.post('/super-admin-login', controllers.auth.superAdminLogin);
 router.post('/logout', tmp);
 router.post('/accessToken', tmp);
 router.post('/refreshToken', tmp);
