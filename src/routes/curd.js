@@ -9,4 +9,9 @@ router.get('/doc/:id', validateToken, controllers.common.fetchDocById);
 router.put('/doc', validateToken, controllers.common.updateDoc);
 router.delete('/doc/:id', validateToken, controllers.common.deleteDocById);
 
+
+
+router.get('/store/doc', controllers.common.fetchDoc);
+router.get('/store/doc/:id', controllers.common.fetchDocById);
+
 module.exports = router;
