@@ -1,10 +1,21 @@
 const models = require('../models');
 const mongoose = require('mongoose');
+const argon2 = require("argon2");
+const jwt = require("jsonwebtoken");
 
 async function saveDoc(req, res) {
-    const CommonModel = mongoose.model(req.body.collection, models.Common);
-    if (req.body.meta && req.body.meta.multiInsert) {
-        var insertData = JSON.parse(JSON.stringify(req.body.data));
+    var reqBody = req.body;
+    const CommonModel = mongoose.model(reqBody.collection, models.Common);
+    if (reqBody.meta && reqBody.meta.multiInsert) {
+        var insertData = JSON.parse(JSON.stringify(reqBody.data));
+        if (reqBody.meta) {
+            if (reqBody.meta.isPassword) {
+                let passwordKey = reqBody.meta.passwordKey;
+                insertData.forEach(iData => {
+                    iData[passwordKey] = argon2.hash(iData[passwordKey]);
+                });
+            }
+        }
         CommonModel.insertMany(insertData)
             .then(function (response) {
                 let result = {
@@ -21,25 +32,49 @@ async function saveDoc(req, res) {
                 res.json(result);
             });
     } else {
-        const commonDoc = new CommonModel(JSON.parse(JSON.stringify(req.body.data)));
-        commonDoc.save(function (error, response) {
-            if (error) {
-                let result = {
-                    status: 'failed',
-                    message: '',
-                }
-                res.json(result);
-            } else {
-                let result = {
-                    status: 'success',
-                    message: '',
-                    data: response
-                };
-                res.json(result);
+        var insertData = JSON.parse(JSON.stringify(reqBody.data));
+        var isDuplicateRecord;
+        if (reqBody.meta) {
+            if (reqBody.meta.duplicate && reqBody.meta.duplicate.length > 0) {
+                var metchingObj = {};
+                reqBody.meta.duplicate.forEach(duplicateKey => {
+                    metchingObj[duplicateKey] = insertData[duplicateKey];
+                })
+                isDuplicateRecord = await CommonModel
+                    .count(metchingObj)
+                    .exec();
             }
-        });
+            if (reqBody.meta.isPassword) {
+                let passwordKey = reqBody.meta.passwordKey;
+                insertData[passwordKey] = await argon2.hash(insertData[passwordKey]);
+            }
+        }
+        if (isDuplicateRecord > 0) {
+            let result = {
+                status: 'failed',
+                message: 'UNIQUE KEY CONSTRAINT',
+            }
+            res.json(result);
+        } else {
+            const commonDoc = new CommonModel(insertData);
+            commonDoc.save(function (error, response) {
+                if (error) {
+                    let result = {
+                        status: 'failed',
+                        message: '',
+                    }
+                    res.json(result);
+                } else {
+                    let result = {
+                        status: 'success',
+                        message: '',
+                        data: response
+                    };
+                    res.json(result);
+                }
+            });
+        }
     }
-
 }
 
 async function fetchDoc(req, res) {
@@ -51,7 +86,7 @@ async function fetchDoc(req, res) {
 
     //let sortKey = sortDetails[0].keyName;
     //let orderType = (sortDetails[0].orderType != 'asc') ? -1 : 1 ;
-    var sortQuery = { [sortKeyName] : orderType };
+    var sortQuery = { [sortKeyName]: orderType };
     //console.log('sortDetails', sortDetails[0]);
     //console.log('sortKey', sortKeyName);
     //console.log('sortQuery', sortQuery);
@@ -92,10 +127,6 @@ async function fetchDoc(req, res) {
             }
         });
     }
-
-
-
-
 }
 
 async function fetchDocById(req, res) {
@@ -122,26 +153,54 @@ async function fetchDocById(req, res) {
 
 async function updateDoc(req, res) {
     const CommonModel = mongoose.model(req.body.collection, models.Common);
-    var docId = req.body.id;
-    var docData = JSON.parse(JSON.stringify(req.body.data));
-    var options = { 'upsert': false, returnOriginal: false };
-    CommonModel.findByIdAndUpdate(docId, docData, options, function (error, response) {
-        console.log('response', response)
-        if (error) {
-            let result = {
-                status: 'failed',
-                message: '',
-            }
-            res.json(result);
-        } else {
-            let result = {
-                status: 'success',
-                message: '',
-                data: response
-            };
-            res.json(result);
+    var reqBody = req.body;
+    var insertData = JSON.parse(JSON.stringify(reqBody.data));
+    var isDuplicateRecord;
+    if (reqBody.meta) {
+        if (reqBody.meta.duplicate && reqBody.meta.duplicate.length > 0) {
+            var metchingObj = {};
+            reqBody.meta.duplicate.forEach(duplicateKey => {
+                metchingObj[duplicateKey] = insertData[duplicateKey];
+            })
+            isDuplicateRecord = await CommonModel
+                .count(metchingObj)
+                .exec();
         }
-    });
+        if (reqBody.meta.isPassword) {
+            let passwordKey = reqBody.meta.passwordKey;
+            insertData[passwordKey] = await argon2.hash(insertData[passwordKey]);
+        }
+    }
+    if (isDuplicateRecord > 0) {
+        let result = {
+            status: 'failed',
+            message: 'UNIQUE KEY CONSTRAINT',
+        }
+        res.json(result);
+    } else {
+        
+        var docId = reqBody.id;
+        var docData = JSON.parse(JSON.stringify(reqBody.data));
+        var options = { 'upsert': false, returnOriginal: false };
+        CommonModel.findByIdAndUpdate(docId, docData, options, function (error, response) {
+            console.log('response', response)
+            if (error) {
+                let result = {
+                    status: 'failed',
+                    message: '',
+                }
+                res.json(result);
+            } else {
+                let result = {
+                    status: 'success',
+                    message: '',
+                    data: response
+                };
+                res.json(result);
+            }
+        });
+    }
+    
 }
 
 async function deleteDocById(req, res) {

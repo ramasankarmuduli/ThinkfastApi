@@ -33,21 +33,28 @@ async function signup(req, res) {
 }
 
 async function login(req, res) {
-    const userDoc = await models.User
-                                .findOne({ username: req.body.username })
-                                .select('password')
-                                .exec();
-    
-    if (await argon2.verify(userDoc.password, req.body.password)) {
-        const accessToken = createToken(userDoc.id, req.body.username);
-        res.json({
-            status: 'success',
-            message: '',
-            data: {
-                userId: userDoc.id,
-                username: req.body.username,
+    try {
+        const userDoc = await models.vendorUser.findOne({ email: req.body.username });
+        if (await argon2.verify(userDoc.password, req.body.password)) {
+            const accessToken = createToken(userDoc.id, req.body.username);
+            let resData = {
+                storeId: userDoc.id,
+                storename: userDoc.storename,
+                username: userDoc.email,
+                phone: userDoc.phone,
                 accessToken: accessToken
-            }
+            };
+
+            res.json({
+                status: 'success',
+                message: '',
+                data: resData
+            });
+        }
+    } catch (error) {
+        res.json({
+            status: 'fail',
+            message: ''
         });
     }
 }
@@ -83,21 +90,28 @@ async function superAdminSignup(req, res) {
 }
 
 async function superAdminLogin(req, res) {
-    const userDoc = await models.SuperAdminUser
-                                .findOne({ username: req.body.username })
-                                .select('password')
-                                .exec();
-    
-    if (await argon2.verify(userDoc.password, req.body.password)) {
-        const accessToken = createToken(userDoc.id, req.body.username);
+    try {
+        const userDoc = await models.SuperAdminUser
+            .findOne({ username: req.body.username })
+            .select('password')
+            .exec();
+
+        if (await argon2.verify(userDoc.password, req.body.password)) {
+            const accessToken = createToken(userDoc.id, req.body.username);
+            res.json({
+                status: 'success',
+                message: '',
+                data: {
+                    userId: userDoc.id,
+                    username: req.body.username,
+                    accessToken: accessToken
+                }
+            });
+        }
+    } catch (error) {
         res.json({
-            status: 'success',
-            message: '',
-            data: {
-                userId: userDoc.id,
-                username: req.body.username,
-                accessToken: accessToken
-            }
+            status: 'fail',
+            message: ''
         });
     }
 }
@@ -131,9 +145,9 @@ const validateToken = async (token) => {
     }
 
     const decodedToken = decodeToken();
-    const tokenExists = await models.User.exists({_id: decodedToken.id, username: decodedToken.username});
+    const tokenExists = await models.User.exists({ _id: decodedToken.id, username: decodedToken.username });
 
-    if(tokenExists) {
+    if (tokenExists) {
         return decodedToken;
     } else {
         return "Unauthorised";
