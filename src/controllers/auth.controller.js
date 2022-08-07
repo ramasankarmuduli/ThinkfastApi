@@ -39,7 +39,7 @@ async function login(req, res) {
             const accessToken = createToken(userDoc.id, req.body.username);
             let resData = {
                 storeId: userDoc.id,
-                storename: userDoc.storename,
+                vendorName: userDoc.vendorName,
                 username: userDoc.email,
                 phone: userDoc.phone,
                 accessToken: accessToken
