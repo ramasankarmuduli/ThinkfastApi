@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const { Schema, model } = mongoose;
 
 const vendorUserSchema = new Schema({
-    storename: { type: String },
+    vendorName: { type: String },
     email: { type: String, unique: true },
     phone: { type: String },
     password: { type: String }
