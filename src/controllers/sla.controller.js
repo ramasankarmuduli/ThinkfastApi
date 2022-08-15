@@ -2,24 +2,44 @@ const models = require('../models');
 const mongoose = require('mongoose');
 const axios = require('axios').default;
 var FormData = require('form-data');
+const moment = require('moment');
 
 async function checkPin(req, res) {
     try {
         let pincode = req.body.pincode;
         let productId = req.body.productId;
         let selectedOptions = req.body.selectedOptions;
+        let vendorId = req.body.vendorId;
         let selectedOptionValues = (selectedOptions) ? selectedOptions.map(function (d) { return d["value"]; }) : [];
 
-        let wirehouseCollection = "wirehouses";
+        let wirehouseCollection = "wirehouses_" + vendorId;
         const WirehouseModel = mongoose.model(wirehouseCollection, models.Common);
         const wirehouseDetails = await WirehouseModel.find();
         console.log("wirehouseDetails", wirehouseDetails);
-        
+
+
+        let courierCollection = "couriorsetup_" + vendorId;
+        const CourierModel = mongoose.model(courierCollection, models.Common);
+        const courierDetails = await CourierModel.find();
+        console.log("courierDetails", courierDetails);
+
+        let delhiveryToken;
+        let pickrrToken; 
+        courierDetails.map(courier => {
+            if(courier.couriorServiceName == "Pickrr") {
+                pickrrToken = courier.pickrrToken;
+            }
+
+            if(courier.couriorServiceName == "Delhivery") {
+                delhiveryToken = courier.delhiveryToken;
+            }
+        })
+
         var courierType = [
             {
                 type: "delhivery",
                 url: "https://track.delhivery.com/c/api/pin-codes/json/",
-                token: "8ad40a98d5cf3db63959d09fc750965e561b9ed7",
+                token: delhiveryToken,
                 status: "Active"
             },
             {
@@ -32,7 +52,7 @@ async function checkPin(req, res) {
             {
                 type: "pickrr",
                 url: "https://www.pickrr.com/api/check-pincode-service/",
-                auth_token: "e2495ab1f1aa403c0fcb12e9e7fffed9135608",
+                auth_token: pickrrToken,
                 status: "Active"
             },
             {
@@ -99,12 +119,12 @@ async function checkPin(req, res) {
                     let wireHousePincode = wirehouse.pincode;
                     let apiUrl = courier.url + "?from_pincode=" + wireHousePincode + "&to_pincode=" + pincode + "&auth_token=" + courier.auth_token;
                     const pickrrResponse = await axios.get(apiUrl);
-                    if(pickrrResponse.err == null) {
+                    if (pickrrResponse.err == null) {
                         courierStatus = true;
                         break;
                     }
                 }
-                if(courierStatus) {
+                if (courierStatus) {
                     break;
                 }
             }
@@ -118,12 +138,12 @@ async function checkPin(req, res) {
                             "Authorization": "Bearer " + courier.token
                         }
                     });
-                    if(shiprocketResponse.status == 200) {
+                    if (shiprocketResponse.status == 200) {
                         courierStatus = true;
                         break;
                     }
                 }
-                if(courierStatus) {
+                if (courierStatus) {
                     break;
                 }
             }
@@ -134,10 +154,21 @@ async function checkPin(req, res) {
         }
 
         if (courierStatus) {
-            let productApiUrl = "https://fstout.myshopify.com/admin/api/2022-07/products/" + productId + ".json";
+            let storeapiCollection = "storeapi_" + vendorId;
+            const StoreapiModel = mongoose.model(storeapiCollection, models.Common);
+            const storeapiDetails = await StoreapiModel.find();
+            console.log("storeapiDetails", storeapiDetails);
+
+            let shopifyStoreUrl = storeapiDetails[0].shopifyStoreUrl;
+            let shopifyApiAccessToken = storeapiDetails[0].shopifyApiAccessToken;
+            let shopifyApiKey = storeapiDetails[0].shopifyApiKey;
+            let shopifyApiSecretKey = storeapiDetails[0].shopifyApiSecretKey;
+            let shopifyApiVersion = (storeapiDetails[0].shopifyApiVersion) ? storeapiDetails[0].shopifyApiVersion : "2022-07";
+
+            let productApiUrl = shopifyStoreUrl + "/admin/api/" + shopifyApiVersion +"/products/" + productId + ".json";
             const productResponse = await axios.get(productApiUrl, {
                 headers: {
-                    "X-Shopify-Access-Token": "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"
+                    "X-Shopify-Access-Token": shopifyApiAccessToken
                 }
             });
             if (productResponse.status == 200) {
@@ -197,7 +228,7 @@ async function checkPin(req, res) {
 
                     console.log('zones', zones)
 
-                    let zonesCollection = "zones";
+                    let zonesCollection = "zones_" + vendorId;
                     const ZonesModel = mongoose.model(zonesCollection, models.Common);
                     const zoneDetails = await ZonesModel.find();
                     console.log("zoneDetails", zoneDetails);
@@ -228,7 +259,40 @@ async function checkPin(req, res) {
                     }
 
                     let responseText1 = "Fastest " + selecteZone.paymentStaus.toLowerCase() + " delivery " + deliverTime;
-                    let responseText2 = "order now";
+                    let responseText2;
+
+
+
+                    let zoneIndex = zones.indexOf(zoneNo);
+                    var nearestWirehouse = wirehouseDetails[zoneIndex];
+                    console.log('nearestWirehouse', nearestWirehouse)
+                    var pickupStartTime = nearestWirehouse.pickupTimeStart;
+                    var pickupEndTime = nearestWirehouse.pickupTimeEnd;
+                    var format = 'hh:mm:ss'
+
+                    var time = moment(); //gives you current time. no format required.
+                    //var time = moment('09:34:00',format),
+                    var curTime = moment().format("HH:mm:ss");
+                    var curMinute = moment().minute();
+                    console.log('time', time)
+                    console.log('curTime', curTime)
+                    console.log('curMinute', curMinute)
+                    console.log('remainingMinute', 60 - curMinute)
+                    var beforeTime = moment(pickupStartTime, format);
+                    var afterTime = moment(pickupEndTime, format);
+                    
+                    if (time.isBetween(beforeTime, afterTime)) {
+                        var remainingMinute = 60 - curMinute;
+                        responseText2 = "order withen " + remainingMinute + ' minutes';
+                        console.log('is between')
+                    } else if(time.isAfter(afterTime)) {
+                        console.log('After pickup time')
+                        responseText2 = "order now";
+                    } else {
+                        console.log('is not between')
+                        responseText2 = "order now";
+                    }
+
                     let responseData = {
                         responseText1: responseText1,
                         responseText2: responseText2,

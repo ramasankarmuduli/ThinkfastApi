@@ -36,6 +36,7 @@ async function login(req, res) {
     try {
         const userDoc = await models.vendorUser.findOne({ email: req.body.username });
         if (await argon2.verify(userDoc.password, req.body.password)) {
+            console.log('12121')
             const accessToken = createToken(userDoc.id, req.body.username);
             let resData = {
                 storeId: userDoc.id,
@@ -50,11 +51,13 @@ async function login(req, res) {
                 message: '',
                 data: resData
             });
+        } else {
+            throw new Error("Invalid Password");
         }
     } catch (error) {
         res.json({
             status: 'fail',
-            message: ''
+            message: error.message
         });
     }
 }
@@ -116,47 +119,63 @@ async function superAdminLogin(req, res) {
     }
 }
 
-
-
-
-
-
-
-
-
-
-
-function createToken(userId, userName) {
-    return jwt.sign({
-        userId: userId,
-        userName: userName
-    }, process.env.ACCESS_TOKEN_SECRET, {
-        expiresIn: '24h'
-    })
+async function validateJwtToken(req, res) {
+    try {
+        let reqToken = req.body.token;
+        if(reqToken) {
+            var validateToken = validToken(reqToken);
+            if(validateToken.status) {
+                res.json({
+                    status: 'success'
+                });
+            } else {
+                throw new Error(validateToken.message);
+            }
+        } else {
+            throw new Error("TOKEN NOT FOUND");
+        }
+    } catch (error) {
+        res.json({
+            status: 'fail',
+            message: error.message
+        });
+    }
 }
-
-const validateToken = async (token) => {
-    const decodeToken = () => {
-        try {
-            return jwt.verify(token, process.env.ACCESS_TOKEN_SECRET)
-        } catch (error) {
-            return error;
+function validToken(token) {
+    try {
+        if(jwt.verify(token, process.env.ACCESS_TOKEN_SECRET)) {
+            return {
+                status: true
+            }
+        } else {
+            return {
+                status: false,
+                message: ""
+            }
+        }
+    } catch (error) {        
+        return {
+            status: false,
+            message: error.message
         }
     }
+}
 
-    const decodedToken = decodeToken();
-    const tokenExists = await models.User.exists({ _id: decodedToken.id, username: decodedToken.username });
-
-    if (tokenExists) {
-        return decodedToken;
-    } else {
-        return "Unauthorised";
-    }
+function createToken(userId, userName) {
+    const iat = Math.floor(Date.now() / 1000)
+    const exp = iat + 1800 // seconds
+    return jwt.sign({
+        userId: userId,
+        userName: userName,
+        iat,
+        exp
+    }, process.env.ACCESS_TOKEN_SECRET)
 }
 
 module.exports = {
     signup,
     login,
     superAdminSignup,
-    superAdminLogin
+    superAdminLogin,
+    validateJwtToken
 }
