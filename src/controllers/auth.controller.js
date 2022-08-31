@@ -163,7 +163,7 @@ function validToken(token) {
 
 function createToken(userId, userName) {
     const iat = Math.floor(Date.now() / 1000)
-    const exp = iat + 1800 // seconds
+    const exp = iat + 10800 // seconds
     return jwt.sign({
         userId: userId,
         userName: userName,
