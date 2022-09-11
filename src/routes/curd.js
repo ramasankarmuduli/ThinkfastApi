@@ -9,6 +9,8 @@ router.get('/doc/:id', validateToken, controllers.common.fetchDocById);
 router.put('/doc', validateToken, controllers.common.updateDoc);
 router.delete('/doc/:id', validateToken, controllers.common.deleteDocById);
 
+router.get('/doc-with-condition', controllers.common.fetchDocWithCondition);
+
 router.post('/store/doc', controllers.common.saveDoc);
 router.get('/store/doc', controllers.common.fetchDoc);
 router.get('/store/doc/:id', controllers.common.fetchDocById);

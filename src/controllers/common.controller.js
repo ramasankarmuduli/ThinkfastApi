@@ -151,6 +151,28 @@ async function fetchDocById(req, res) {
     });
 }
 
+async function fetchDocWithCondition(req, res) {
+    var reqBody = req.body;
+    const CommonModel = mongoose.model(reqBody.collection, models.Common);
+    var query = reqBody.query;
+    CommonModel.find(query, function (error, response) {
+        if (error) {
+            console.log(error);
+            let result = {
+                status: 'failed',
+                message: '',
+            }
+        } else {
+            let result = {
+                status: 'success',
+                message: '',
+                data: response
+            };
+            res.json(result);
+        }
+    });
+}
+
 async function updateDoc(req, res) {
     const CommonModel = mongoose.model(req.body.collection, models.Common);
     var reqBody = req.body;
@@ -229,5 +251,6 @@ module.exports = {
     fetchDoc,
     fetchDocById,
     updateDoc,
-    deleteDocById
+    deleteDocById,
+    fetchDocWithCondition
 }

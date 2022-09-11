@@ -23,17 +23,9 @@ async function checkPin(req, res) {
         const courierDetails = await CourierModel.find();
         console.log("courierDetails", courierDetails);
 
-        let delhiveryToken;
-        let pickrrToken; 
-        courierDetails.map(courier => {
-            if(courier.couriorServiceName == "Pickrr") {
-                pickrrToken = courier.pickrrToken;
-            }
-
-            if(courier.couriorServiceName == "Delhivery") {
-                delhiveryToken = courier.delhiveryToken;
-            }
-        })
+        let delhiveryToken = "";
+        let pickrrToken = "";
+        var shipRocketToken = "";
 
         var courierType = [
             {
@@ -58,16 +50,126 @@ async function checkPin(req, res) {
             {
                 type: "shiprocket",
                 url: "https://apiv2.shiprocket.in/v1/external/courier/serviceability/",
-                token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOjI4NjcyNTYsImlzcyI6Imh0dHBzOi8vYXBpdjIuc2hpcHJvY2tldC5pbi92MS9leHRlcm5hbC9hdXRoL2xvZ2luIiwiaWF0IjoxNjU5MTk4NTE4LCJleHAiOjE2NjAwNjI1MTgsIm5iZiI6MTY1OTE5ODUxOCwianRpIjoiTmo0ZnIzRXdxaGVVZURyaSJ9.MHGw3rRrE-CpkqTxe0bOV2P-6-yAhOzh09pZ7SqT2jA",
-                status: "NotActive"
+                token: shipRocketToken, //"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOjI4NjcyNTYsImlzcyI6Imh0dHBzOi8vYXBpdjIuc2hpcHJvY2tldC5pbi92MS9leHRlcm5hbC9hdXRoL2xvZ2luIiwiaWF0IjoxNjU5MTk4NTE4LCJleHAiOjE2NjAwNjI1MTgsIm5iZiI6MTY1OTE5ODUxOCwianRpIjoiTmo0ZnIzRXdxaGVVZURyaSJ9.MHGw3rRrE-CpkqTxe0bOV2P-6-yAhOzh09pZ7SqT2jA",
+                status: "Active"
             }
         ];
+
+        for (let i = 0; i < courierDetails.length; i++) {
+            const courier = courierDetails[i];
+            if (courier.couriorServiceName == "Pickrr") {
+                //pickrrToken = courier.pickrrToken;
+                var index = courierType.map(function (x) { return x.type; }).indexOf("pickrr");
+                courierType[index].auth_token = courier.pickrrToken;
+            }
+
+            if (courier.couriorServiceName == "Delhivery") {
+                //delhiveryToken = courier.delhiveryToken;
+                var index = courierType.map(function (x) { return x.type; }).indexOf("delhivery");
+                courierType[index].token = courier.delhiveryToken;
+            }
+
+            if (courier.couriorServiceName == "Shiprocket") {
+                if (courier.shipRocketToken && courier.shipRocketToken != "") {
+                    var index = courierType.map(function (x) { return x.type; }).indexOf("shiprocket");
+                    courierType[index].token = courier.shipRocketToken;
+                } else {
+                    var apiUrl = "https://apiv2.shiprocket.in/v1/external/auth/login";
+                    var requestData = {
+                        "email": courier.shiprocketUsername,
+                        "password": courier.shiprocketPassword
+                    }
+                    const tokenResponce = await axios.post(apiUrl, requestData);
+                        if (tokenResponce.status == 200 && tokenResponce.data && tokenResponce.data.token) {
+                            var index = courierType.map(function (x) { return x.type; }).indexOf("shiprocket");
+                            courierType[index].token = tokenResponce.data.token;
+                            var docId = courier.id;
+                            var docData = {
+                                shipRocketToken: tokenResponce.data.token
+                            };
+                            var options = { 'upsert': true, returnOriginal: false };
+                            CourierModel.findByIdAndUpdate(docId, docData, options, function (error, response) {
+                                if (error) {
+                                    console.log("Failed to update Shiprocket token");
+                                } else {
+                                    //shipRocketToken = response.token
+                                    console.log("Shiprocket token updated");                                    
+                                }
+                            });
+                        }
+                }
+            }
+        }
+        // courierDetails.map(async courier => {
+        //     if (courier.couriorServiceName == "Pickrr") {
+        //         //pickrrToken = courier.pickrrToken;
+        //         var index = courierType.map(function (x) { return x.type; }).indexOf("pickrr");
+        //         courierType[index].auth_token = courier.pickrrToken;
+        //     }
+
+        //     if (courier.couriorServiceName == "Delhivery") {
+        //         //delhiveryToken = courier.delhiveryToken;
+        //         var index = courierType.map(function (x) { return x.type; }).indexOf("delhivery");
+        //         courierType[index].token = courier.delhiveryToken;
+        //     }
+
+        //     if (courier.couriorServiceName == "Shiprocket") {
+        //         if (courier.shipRocketToken && courier.shipRocketToken != "") {
+        //             var index = courierType.map(function (x) { return x.type; }).indexOf("shiprocket");
+        //             courierType[index].token = courier.shipRocketToken;
+        //         } else {
+
+
+
+
+
+        //             var apiUrl = "https://apiv2.shiprocket.in/v1/external/auth/login";
+        //             var requestData = {
+        //                 "email": courier.shiprocketUsername,
+        //                 "password": courier.shiprocketPassword
+        //             }
+        //             const tokenResponce = await axios.post(apiUrl, requestData);
+
+        //             console.log('tokenResponce', tokenResponce)
+
+        //             // if (tokenResponce.status == 200) {
+        //             //     if (tokenResponce.data && tokenResponce.data.token) {
+
+
+
+
+
+
+        //             //const shipRocketTokenDetails = generateShipRocketToken(courier.shiprocketUsername, courier.shiprocketPassword);
+
+        //             //shipRocketTokenDetails.then(res => {
+        //                 if (tokenResponce.status == 200 && tokenResponce.data && tokenResponce.data.token) {
+        //                     var docId = courier.id;
+        //                     var docData = {
+        //                         shipRocketToken: tokenResponce.data.token
+        //                     };
+        //                     var options = { 'upsert': true, returnOriginal: false };
+        //                     CourierModel.findByIdAndUpdate(docId, docData, options, function (error, response) {
+        //                         console.log('response', response)
+        //                         if (error) {
+        //                             console.log("Failed to update Shiprocker token");
+        //                         } else {
+        //                             //shipRocketToken = response.token
+        //                             var index = courierType.map(function (x) { return x.type; }).indexOf("shiprocket");
+        //                             courierType[index].token = response.shipRocketToken;
+        //                         }
+        //                     });
+        //                 }
+        //             //})
+        //         }
+        //     }
+        // })
 
         let courierStatus = false;
 
         for (let index = 0; index < courierType.length; index++) {
             const courier = courierType[index];
-            if (courier.type == "delhivery") {
+            if (courier.type == "delhivery" && courier.token != "") {
                 let apiUrl = courier.url + "?token=" + courier.token + "&filter_codes=" + pincode;
                 const response = await axios.get(apiUrl);
                 if (response.status == 200) {
@@ -114,7 +216,7 @@ async function checkPin(req, res) {
                 //break;
             }
 
-            if (courier.type == "pickrr") {
+            if (courier.type == "pickrr" && courier.auth_token != "") {
                 for (const wirehouse of wirehouseDetails) {
                     let wireHousePincode = wirehouse.pincode;
                     let apiUrl = courier.url + "?from_pincode=" + wireHousePincode + "&to_pincode=" + pincode + "&auth_token=" + courier.auth_token;
@@ -129,7 +231,7 @@ async function checkPin(req, res) {
                 }
             }
 
-            if (courier.type == "shiprocket") {
+            if (courier.type == "shiprocket" && courier.token != "") {
                 for (const wirehouse of wirehouseDetails) {
                     let wireHousePincode = wirehouse.pincode;
                     let apiUrl = courier.url + "?pickup_postcode=" + wireHousePincode + "&delivery_postcode=" + pincode + "&cod=0&weight=.5";
@@ -165,7 +267,7 @@ async function checkPin(req, res) {
             let shopifyApiSecretKey = storeapiDetails[0].shopifyApiSecretKey;
             let shopifyApiVersion = (storeapiDetails[0].shopifyApiVersion) ? storeapiDetails[0].shopifyApiVersion : "2022-07";
 
-            let productApiUrl = shopifyStoreUrl + "/admin/api/" + shopifyApiVersion +"/products/" + productId + ".json";
+            let productApiUrl = shopifyStoreUrl + "/admin/api/" + shopifyApiVersion + "/products/" + productId + ".json";
             const productResponse = await axios.get(productApiUrl, {
                 headers: {
                     "X-Shopify-Access-Token": shopifyApiAccessToken
@@ -280,12 +382,12 @@ async function checkPin(req, res) {
                     console.log('remainingMinute', 60 - curMinute)
                     var beforeTime = moment(pickupStartTime, format);
                     var afterTime = moment(pickupEndTime, format);
-                    
+
                     if (time.isBetween(beforeTime, afterTime)) {
                         var remainingMinute = 60 - curMinute;
                         responseText2 = "order withen " + remainingMinute + ' minutes';
                         console.log('is between')
-                    } else if(time.isAfter(afterTime)) {
+                    } else if (time.isAfter(afterTime)) {
                         console.log('After pickup time')
                         responseText2 = "order now";
                     } else {
@@ -338,6 +440,40 @@ async function checkPin(req, res) {
         res.json(result);
     }
 }
+
+// async function generateShipRocketToken(username, password) {
+//     try {
+//         if (username != "" && password != "") {
+//             var apiUrl = "https://apiv2.shiprocket.in/v1/external/auth/login";
+//             var requestData = {
+//                 "email": username,
+//                 "password": password
+//             }
+//             const tokenResponce = await axios.post(apiUrl, requestData);
+//             if (tokenResponce.status == 200) {
+//                 if (tokenResponce.data && tokenResponce.data.token) {
+//                     var result = {
+//                         status: "success",
+//                         token: tokenResponce.data.token
+//                     };
+//                     return Promise.resolve(result)
+//                 } else {
+//                     throw new Error("TOKEN NOT FOUND");
+//                 }
+//             } else {
+//                 throw new Error("TOKEN NOT FOUND");
+//             }
+//         } else {
+//             throw new Error("INVALID USERNAME AND PASSWORD");
+//         }
+//     } catch (error) {
+//         var result = {
+//             status: "fail",
+//             message: error.message
+//         };
+//         return Promise.resolve(result)
+//     }
+// }
 module.exports = {
     checkPin
 }
