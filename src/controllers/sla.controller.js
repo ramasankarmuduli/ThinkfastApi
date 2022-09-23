@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const axios = require('axios').default;
 var FormData = require('form-data');
 const moment = require('moment');
+const xml2js = require('xml2js');
 
 async function checkPin(req, res) {
     try {
@@ -277,6 +278,7 @@ async function checkPin(req, res) {
                         "X-Shopify-Access-Token": shopifyApiAccessToken
                     }
                 });
+
                 if (productResponse.status == 200) {
                     let productResponseData = productResponse.data;
                     //console.log('productResponseData', productResponseData);
@@ -305,6 +307,7 @@ async function checkPin(req, res) {
                         console.log("selectedPincodeDetails", selectedPincodeDetails);
 
                         let zones = [];
+                        let wirehouseDistances = [];
                         if (wirehouseDetails.length > 0) {
                             for (const wirehouse of wirehouseDetails) {
                                 let wireHousePincode = wirehouse.pincode;
@@ -328,11 +331,36 @@ async function checkPin(req, res) {
                                         //zones.push("Zone D");
                                         zones.push(4);
                                     }
+
+
+
+                                    let distanceAPIUrl = "https://maps.googleapis.com/maps/api/distancematrix/xml?origins=" + parseInt(wireHousePincode) + "&destinations=" + parseInt(selectedPincodeDetails[0].Pincode) + "&key=AIzaSyDlY_XJr0DFrethl4stUZ-0RtjysGeCBXE";
+                                    console.log('distanceAPIUrl', distanceAPIUrl)
+                                    const distanceResponse = await axios.get(distanceAPIUrl);
+                                    if (distanceResponse.status == 200) {
+                                        distanceResponseData = distanceResponse.data;
+                                        xml2js.parseString(distanceResponseData, (err, result) => {
+                                            if (err) {
+                                                throw err;
+                                            } else {
+
+                                            }
+                                            const distanceResponseJsonData = JSON.parse(JSON.stringify(result, null, 4));
+                                            console.log('distanceResponseData', JSON.stringify(result, null, 4));
+                                            if (distanceResponseJsonData.DistanceMatrixResponse.row[0].element[0].status[0] == "OK") {
+                                                console.log('distance', distanceResponseJsonData.DistanceMatrixResponse.row[0].element[0].distance[0].value[0])
+
+                                                let distance = distanceResponseJsonData.DistanceMatrixResponse.row[0].element[0].distance[0].value[0];
+                                                wirehouseDistances.push(parseInt(distance))
+                                            }
+                                        });
+                                    }
                                 }
                             };
                         }
 
                         console.log('zones', zones)
+                        console.log('wirehouseDistances', wirehouseDistances)
 
                         let zonesCollection = "zones_" + vendorId;
                         const ZonesModel = mongoose.model(zonesCollection, models.Common);
@@ -355,49 +383,92 @@ async function checkPin(req, res) {
 
                         let selecteZone = zoneDetails.find(zone => zone.zoneName === finalZone);
 
-                        let deliverTime = "";
-                        if (selecteZone.shippingTime == '24 Hours') {
-                            deliverTime = "today";
-                        } else if (selecteZone.shippingTime == '2 days') {
-                            deliverTime = "tomorrow";
-                        } else {
-                            deliverTime = "in " + selecteZone.shippingTime;
-                        }
-
-                        let responseText1 = "Fastest " + selecteZone.paymentStaus.toLowerCase() + " delivery " + deliverTime;
                         let responseText2;
-
-
-
                         let zoneIndex = zones.indexOf(zoneNo);
-                        var nearestWirehouse = wirehouseDetails[zoneIndex];
+
+                        const minDistance = Math.min(...wirehouseDistances);
+                        let minDistanceIndex = wirehouseDistances.indexOf(minDistance);
+
+                        var nearestWirehouse = wirehouseDetails[minDistanceIndex];
                         console.log('nearestWirehouse', nearestWirehouse)
                         var pickupStartTime = nearestWirehouse.pickupTimeStart;
                         var pickupEndTime = nearestWirehouse.pickupTimeEnd;
                         var format = 'hh:mm:ss'
 
-                        var time = moment(); //gives you current time. no format required.
+                        var time = moment().utcOffset("+05:30"); //gives you current time. no format required.
                         //var time = moment('09:34:00',format),
-                        var curTime = moment().format("HH:mm:ss");
-                        var curMinute = moment().minute();
+                        var curTime = moment().utcOffset("+05:30").format("HH:mm:ss");
+                        var curMinute = moment().utcOffset("+05:30").minute();
                         console.log('time', time)
                         console.log('curTime', curTime)
                         console.log('curMinute', curMinute)
                         console.log('remainingMinute', 60 - curMinute)
                         var beforeTime = moment(pickupStartTime, format);
                         var afterTime = moment(pickupEndTime, format);
+                        var midNight = moment('00:01', format);
+
+                        console.log('beforeTime', beforeTime)
+                        console.log('afterTime', afterTime)
+                        console.log('midNight', midNight)
+                        console.log('selecteZone', selecteZone)
+
+                        let deliverTime = "";
+                        // if(time.isAfter(midNight) && time.isBefore(beforeTime)) {
+                        //     console.log('After midnight and before pickup time')
+                        //     responseText2 = "order now";
+
+                        //     if (selecteZone.shippingTime == '24 Hours') {
+                        //         deliverTime = "today";
+                        //     } else if (selecteZone.shippingTime == '2 days') {
+                        //         deliverTime = "tomorrow";
+                        //     } else {
+                        //         deliverTime = "in " + selecteZone.shippingTime;
+                        //     }
+
+                        // } 
 
                         if (time.isBetween(beforeTime, afterTime)) {
                             var remainingMinute = 60 - curMinute;
                             responseText2 = "order withen " + remainingMinute + ' minutes';
-                            console.log('is between')
+                            console.log('is between pickup start and end time');
+
+                            if (selecteZone.shippingTime == '24 Hours') {
+                                deliverTime = "today";
+                            } else if (selecteZone.shippingTime == '2 days') {
+                                deliverTime = "tomorrow";
+                            } else {
+                                deliverTime = "in " + selecteZone.shippingTime;
+                            }
+
                         } else if (time.isAfter(afterTime)) {
-                            console.log('After pickup time')
+                            console.log('After pickup time & before midnight')
                             responseText2 = "order now";
+
+                            if (selecteZone.shippingTime == '24 Hours') {
+                                deliverTime = "tomorrow";
+                            } else if (selecteZone.shippingTime == '2 days') {
+                                deliverTime = "in 3 days";
+                            } else if (selecteZone.shippingTime == '3 days') {
+                                deliverTime = "in 4 days";
+                            } else if (selecteZone.shippingTime == '4 days') {
+                                deliverTime = "in 5 days";
+                            } else {
+                                deliverTime = "in 6 days";
+                            }
                         } else {
                             console.log('is not between')
                             responseText2 = "order now";
+
+                            if (selecteZone.shippingTime == '24 Hours') {
+                                deliverTime = "today";
+                            } else if (selecteZone.shippingTime == '2 days') {
+                                deliverTime = "tomorrow";
+                            } else {
+                                deliverTime = "in " + selecteZone.shippingTime;
+                            }
                         }
+
+                        let responseText1 = "Fastest " + selecteZone.paymentStaus.toLowerCase() + " delivery " + deliverTime;
 
                         let responseData = {
                             responseText1: responseText1,
