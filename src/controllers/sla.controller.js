@@ -332,8 +332,6 @@ async function checkPin(req, res) {
                                         zones.push(4);
                                     }
 
-
-
                                     let distanceAPIUrl = "https://maps.googleapis.com/maps/api/distancematrix/xml?origins=" + parseInt(wireHousePincode) + "&destinations=" + parseInt(selectedPincodeDetails[0].Pincode) + "&key=AIzaSyDlY_XJr0DFrethl4stUZ-0RtjysGeCBXE";
                                     console.log('distanceAPIUrl', distanceAPIUrl)
                                     const distanceResponse = await axios.get(distanceAPIUrl);
@@ -348,8 +346,6 @@ async function checkPin(req, res) {
                                             const distanceResponseJsonData = JSON.parse(JSON.stringify(result, null, 4));
                                             console.log('distanceResponseData', JSON.stringify(result, null, 4));
                                             if (distanceResponseJsonData.DistanceMatrixResponse.row[0].element[0].status[0] == "OK") {
-                                                console.log('distance', distanceResponseJsonData.DistanceMatrixResponse.row[0].element[0].distance[0].value[0])
-
                                                 let distance = distanceResponseJsonData.DistanceMatrixResponse.row[0].element[0].distance[0].value[0];
                                                 wirehouseDistances.push(parseInt(distance))
                                             }
@@ -382,36 +378,23 @@ async function checkPin(req, res) {
                         }
 
                         let selecteZone = zoneDetails.find(zone => zone.zoneName === finalZone);
-
                         let responseText2;
-                        let zoneIndex = zones.indexOf(zoneNo);
-
+                        //let zoneIndex = zones.indexOf(zoneNo);
                         const minDistance = Math.min(...wirehouseDistances);
                         let minDistanceIndex = wirehouseDistances.indexOf(minDistance);
-
                         var nearestWirehouse = wirehouseDetails[minDistanceIndex];
                         console.log('nearestWirehouse', nearestWirehouse)
+
                         var pickupStartTime = nearestWirehouse.pickupTimeStart;
                         var pickupEndTime = nearestWirehouse.pickupTimeEnd;
-                        var format = 'hh:mm:ss'
-
-                        var time = moment().utcOffset("+05:30"); //gives you current time. no format required.
-                        //var time = moment('09:34:00',format),
+                        var format = 'HH:mm:ss';
                         var curTime = moment().utcOffset("+05:30").format("HH:mm:ss");
                         var curMinute = moment().utcOffset("+05:30").minute();
-                        console.log('time', time)
-                        console.log('curTime', curTime)
-                        console.log('curMinute', curMinute)
-                        console.log('remainingMinute', 60 - curMinute)
+
+                        var time = moment(curTime, format);
                         var beforeTime = moment(pickupStartTime, format);
                         var afterTime = moment(pickupEndTime, format);
-                        var midNight = moment('00:01', format);
-
-                        console.log('beforeTime', beforeTime)
-                        console.log('afterTime', afterTime)
-                        console.log('midNight', midNight)
-                        console.log('selecteZone', selecteZone)
-
+                        //var midNight = moment('00:01', format);
                         let deliverTime = "";
                         // if(time.isAfter(midNight) && time.isBefore(beforeTime)) {
                         //     console.log('After midnight and before pickup time')
@@ -426,7 +409,7 @@ async function checkPin(req, res) {
                         //     }
 
                         // } 
-
+                        console.log('isBetween', time.isBetween(beforeTime, afterTime))
                         if (time.isBetween(beforeTime, afterTime)) {
                             var remainingMinute = 60 - curMinute;
                             responseText2 = "order withen " + remainingMinute + ' minutes';
@@ -439,9 +422,8 @@ async function checkPin(req, res) {
                             } else {
                                 deliverTime = "in " + selecteZone.shippingTime;
                             }
-
                         } else if (time.isAfter(afterTime)) {
-                            console.log('After pickup time & before midnight')
+                            console.log('After pickup time')
                             responseText2 = "order now";
 
                             if (selecteZone.shippingTime == '24 Hours') {
@@ -502,14 +484,14 @@ async function checkPin(req, res) {
             } else {
                 let result = {
                     status: 'false',
-                    message: 'Courier service is not available to your address'
+                    message: 'We are sorry, we can not deliver at this location.'
                 };
                 res.json(result);
             }
         } else {
             let result = {
                 status: 'false',
-                message: 'Wrong Pincode Or Pincode not found.'
+                message: 'Invalid pin code, please try with correct pin code.'
             };
             res.json(result);
         }
@@ -517,7 +499,7 @@ async function checkPin(req, res) {
         console.error(error);
         let result = {
             status: 'false',
-            message: 'Wrong Pincode Or Pincode not found, contact your store'
+            message: 'Invalid pin code, please try with correct pin code.'
         };
         res.json(result);
     }
