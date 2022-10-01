@@ -22,7 +22,6 @@ async function checkPin(req, res) {
             const wirehouseDetails = await WirehouseModel.find();
             console.log("wirehouseDetails", wirehouseDetails);
 
-
             let courierCollection = "couriorsetup_" + vendorId;
             const CourierModel = mongoose.model(courierCollection, models.Common);
             const courierDetails = await CourierModel.find();
@@ -271,6 +270,7 @@ async function checkPin(req, res) {
                 let shopifyApiKey = storeapiDetails[0].shopifyApiKey;
                 let shopifyApiSecretKey = storeapiDetails[0].shopifyApiSecretKey;
                 let shopifyApiVersion = (storeapiDetails[0].shopifyApiVersion) ? storeapiDetails[0].shopifyApiVersion : "2022-07";
+                let trackInventoryLocationWise = (storeapiDetails[0].trackInventoryLocationWise) ? storeapiDetails[0].trackInventoryLocationWise : "No";
 
                 let productApiUrl = shopifyStoreUrl + "/admin/api/" + shopifyApiVersion + "/products/" + productId + ".json";
                 const productResponse = await axios.get(productApiUrl, {
@@ -281,87 +281,152 @@ async function checkPin(req, res) {
 
                 if (productResponse.status == 200) {
                     let productResponseData = productResponse.data;
-                    //console.log('productResponseData', productResponseData);
-                    let inventoryStatus = false;
+                    //console.log('productResponseData', productResponseData.product.variants);
+                    var selectedVariant;
                     productResponseData.product.variants.forEach(variant => {
-                        //console.log('selectedOptions', selectedOptions);
                         if (selectedOptions && selectedOptions.length > 0) {
                             var exists = selectedOptionValues.every(v => {
                                 return Object.values(variant).includes(v);
                             })
-                            if (exists && variant.inventory_quantity > 0) {
-                                inventoryStatus = true;
+                            if (exists && variant) {
+                                selectedVariant = variant;
                             }
                         } else { //Simple Product
-                            //console.log('Simple Product', variant.inventory_quantity)
-                            if (variant.inventory_quantity > 0) {
-                                inventoryStatus = true;
+                            if (variant) {
+                                selectedVariant = variant;
                             }
                         }
                     });
+                    console.log('selectedVariant', selectedVariant)
+                    let inventoryStatus = false;
+                    if (trackInventoryLocationWise == "Yes") {
+                        var locationWiseWarehouseIndexAndProductAvailable = [];
+                        for (let index = 0; index < wirehouseDetails.length; index++) {
+                            const wirehouse = wirehouseDetails[index];
+                            if (wirehouse.shopifyLocationId) {
+                                let locationInventoryApiUrl = shopifyStoreUrl + "/admin/api/" + shopifyApiVersion + "/locations/" + wirehouse.shopifyLocationId + "/inventory_levels.json";
+                                const locationInventoryResponse = await axios.get(locationInventoryApiUrl, {
+                                    headers: {
+                                        "X-Shopify-Access-Token": shopifyApiAccessToken
+                                    }
+                                });
+                                if (locationInventoryResponse.status == 200) {
+                                    var inventoryLevels = locationInventoryResponse.data.inventory_levels;
+                                    console.log('inventoryLevels', inventoryLevels)
+                                    if (inventoryLevels.some(il => il.inventory_item_id === selectedVariant.inventory_item_id && il.available > 0)) {
+                                        inventoryStatus = true;
+                                        locationWiseWarehouseIndexAndProductAvailable.push({
+                                            warehouseIndex: index,
+                                            isProductAvailable: true
+                                        })
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        if (selectedVariant.inventory_quantity && selectedVariant.inventory_quantity > 0) {
+                            inventoryStatus = true;
+                        }
+                    }
 
                     if (inventoryStatus) {
                         let pincodeCollection = "pincodes";
                         const PincodeModel = mongoose.model(pincodeCollection, models.Common);
                         const selectedPincodeDetails = await PincodeModel.find({ Pincode: parseInt(pincode) });
-                        console.log("selectedPincodeDetails", selectedPincodeDetails);
 
                         let zones = [];
                         let wirehouseDistances = [];
+                        let warehouseIndexAndDeliveryDistance = [];
                         if (wirehouseDetails.length > 0) {
-                            for (const wirehouse of wirehouseDetails) {
-                                let wireHousePincode = wirehouse.pincode;
-                                const wirehousePincodeDetails = await PincodeModel.find({ Pincode: parseInt(wireHousePincode) });
-                                console.log("wirehousePincodeDetails", wirehousePincodeDetails);
 
-                                if (wirehousePincodeDetails.length > 0 && selectedPincodeDetails.length > 0) {
-                                    if (selectedPincodeDetails[0].District == wirehousePincodeDetails[0].District) {
-                                        //zones.push("Zone A");
-                                        zones.push(1);
-                                    } else if (selectedPincodeDetails[0].State == wirehousePincodeDetails[0].State) {
-                                        //zones.push("Zone B");
-                                        zones.push(2);
-                                    } else if (selectedPincodeDetails[0].Zone == 'C' && wirehousePincodeDetails[0].Zone == 'C' && selectedPincodeDetails[0].State != wirehousePincodeDetails[0].State) {
-                                        //zones.push("Zone C");
-                                        zones.push(3);
-                                    } else if (selectedPincodeDetails[0].Zone == 'E' && wirehousePincodeDetails[0].Zone == 'E' && selectedPincodeDetails[0].State != wirehousePincodeDetails[0].State) {
-                                        //zones.push("Zone E");
-                                        zones.push(5);
-                                    } else {
-                                        //zones.push("Zone D");
-                                        zones.push(4);
-                                    }
-
-                                    let distanceAPIUrl = "https://maps.googleapis.com/maps/api/distancematrix/xml?origins=" + parseInt(wireHousePincode) + "&destinations=" + parseInt(selectedPincodeDetails[0].Pincode) + "&key=AIzaSyDlY_XJr0DFrethl4stUZ-0RtjysGeCBXE";
-                                    console.log('distanceAPIUrl', distanceAPIUrl)
-                                    const distanceResponse = await axios.get(distanceAPIUrl);
-                                    if (distanceResponse.status == 200) {
-                                        distanceResponseData = distanceResponse.data;
-                                        xml2js.parseString(distanceResponseData, (err, result) => {
-                                            if (err) {
-                                                throw err;
+                            for (let index = 0; index < wirehouseDetails.length; index++) {
+                                const wirehouse = wirehouseDetails[index];
+                                if (trackInventoryLocationWise == "Yes") {
+                                    if (locationWiseWarehouseIndexAndProductAvailable.some(lwip => lwip.warehouseIndex === index && lwip.isProductAvailable)) {
+                                        let wireHousePincode = wirehouse.pincode;
+                                        const wirehousePincodeDetails = await PincodeModel.find({ Pincode: parseInt(wireHousePincode) });
+                                        if (wirehousePincodeDetails.length > 0 && selectedPincodeDetails.length > 0) {
+                                            if (selectedPincodeDetails[0].District == wirehousePincodeDetails[0].District) {
+                                                zones.push(1); //Zone A
+                                            } else if (selectedPincodeDetails[0].State == wirehousePincodeDetails[0].State) {
+                                                zones.push(2); //Zone B
+                                            } else if (selectedPincodeDetails[0].Zone == 'C' && wirehousePincodeDetails[0].Zone == 'C' && selectedPincodeDetails[0].State != wirehousePincodeDetails[0].State) {
+                                                zones.push(3); //Zone C
+                                            } else if (selectedPincodeDetails[0].Zone == 'E' && wirehousePincodeDetails[0].Zone == 'E' && selectedPincodeDetails[0].State != wirehousePincodeDetails[0].State) {
+                                                zones.push(5); //Zone E
                                             } else {
+                                                zones.push(4); //Zone D
+                                            }
 
+                                            let distanceAPIUrl = "https://maps.googleapis.com/maps/api/distancematrix/xml?origins=" + parseInt(wireHousePincode) + "&destinations=" + parseInt(selectedPincodeDetails[0].Pincode) + "&key=" + process.env.GOOGLE_API_KEY;
+                                            const distanceResponse = await axios.get(distanceAPIUrl);
+                                            if (distanceResponse.status == 200) {
+                                                distanceResponseData = distanceResponse.data;
+                                                xml2js.parseString(distanceResponseData, (err, result) => {
+                                                    if (err) {
+                                                        throw err;
+                                                    } else {
+
+                                                    }
+                                                    const distanceResponseJsonData = JSON.parse(JSON.stringify(result, null, 4));
+                                                    if (distanceResponseJsonData.DistanceMatrixResponse.row[0].element[0].status[0] == "OK") {
+                                                        let distance = distanceResponseJsonData.DistanceMatrixResponse.row[0].element[0].distance[0].value[0];
+                                                        wirehouseDistances.push(parseInt(distance));
+                                                        warehouseIndexAndDeliveryDistance.push({
+                                                            warehouseIndex: index,
+                                                            deliveryDistance: distance
+                                                        })
+                                                    }
+                                                });
                                             }
-                                            const distanceResponseJsonData = JSON.parse(JSON.stringify(result, null, 4));
-                                            console.log('distanceResponseData', JSON.stringify(result, null, 4));
-                                            if (distanceResponseJsonData.DistanceMatrixResponse.row[0].element[0].status[0] == "OK") {
-                                                let distance = distanceResponseJsonData.DistanceMatrixResponse.row[0].element[0].distance[0].value[0];
-                                                wirehouseDistances.push(parseInt(distance))
-                                            }
-                                        });
+                                        }
+                                    }
+                                } else {
+                                    let wireHousePincode = wirehouse.pincode;
+                                    const wirehousePincodeDetails = await PincodeModel.find({ Pincode: parseInt(wireHousePincode) });
+                                    if (wirehousePincodeDetails.length > 0 && selectedPincodeDetails.length > 0) {
+                                        if (selectedPincodeDetails[0].District == wirehousePincodeDetails[0].District) {
+                                            zones.push(1); //Zone A
+                                        } else if (selectedPincodeDetails[0].State == wirehousePincodeDetails[0].State) {
+                                            zones.push(2); //Zone B
+                                        } else if (selectedPincodeDetails[0].Zone == 'C' && wirehousePincodeDetails[0].Zone == 'C' && selectedPincodeDetails[0].State != wirehousePincodeDetails[0].State) {
+                                            zones.push(3); //Zone C
+                                        } else if (selectedPincodeDetails[0].Zone == 'E' && wirehousePincodeDetails[0].Zone == 'E' && selectedPincodeDetails[0].State != wirehousePincodeDetails[0].State) {
+                                            zones.push(5); //Zone E
+                                        } else {
+                                            zones.push(4); //Zone D
+                                        }
+
+                                        let distanceAPIUrl = "https://maps.googleapis.com/maps/api/distancematrix/xml?origins=" + parseInt(wireHousePincode) + "&destinations=" + parseInt(selectedPincodeDetails[0].Pincode) + "&key=" + process.env.GOOGLE_API_KEY;
+                                        const distanceResponse = await axios.get(distanceAPIUrl);
+                                        if (distanceResponse.status == 200) {
+                                            distanceResponseData = distanceResponse.data;
+                                            xml2js.parseString(distanceResponseData, (err, result) => {
+                                                if (err) {
+                                                    throw err;
+                                                } else {
+
+                                                }
+                                                const distanceResponseJsonData = JSON.parse(JSON.stringify(result, null, 4));
+                                                console.log('distanceResponseData', JSON.stringify(result, null, 4));
+                                                if (distanceResponseJsonData.DistanceMatrixResponse.row[0].element[0].status[0] == "OK") {
+                                                    let distance = parseInt(distanceResponseJsonData.DistanceMatrixResponse.row[0].element[0].distance[0].value[0]);
+                                                    wirehouseDistances.push(parseInt(distance));
+                                                    warehouseIndexAndDeliveryDistance.push({
+                                                        warehouseIndex: index,
+                                                        deliveryDistance: parseInt(distance)
+                                                    })
+                                                }
+                                            });
+                                        }
                                     }
                                 }
                             };
                         }
-
-                        console.log('zones', zones)
-                        console.log('wirehouseDistances', wirehouseDistances)
-
+                        console.log('warehouseIndexAndDeliveryDistance', warehouseIndexAndDeliveryDistance);
                         let zonesCollection = "zones_" + vendorId;
                         const ZonesModel = mongoose.model(zonesCollection, models.Common);
                         const zoneDetails = await ZonesModel.find();
-                        console.log("zoneDetails", zoneDetails);
 
                         let finalZone = "";
                         const zoneNo = Math.min(...zones);
@@ -379,10 +444,23 @@ async function checkPin(req, res) {
 
                         let selecteZone = zoneDetails.find(zone => zone.zoneName === finalZone);
                         let responseText2;
-                        //let zoneIndex = zones.indexOf(zoneNo);
                         const minDistance = Math.min(...wirehouseDistances);
-                        let minDistanceIndex = wirehouseDistances.indexOf(minDistance);
-                        var nearestWirehouse = wirehouseDetails[minDistanceIndex];
+
+                        var nearestWirehouse;
+                        let minDistanceIndex;
+                        console.log('wirehouseDistances', wirehouseDistances)
+                        if (trackInventoryLocationWise == "Yes") {
+                            let objj = warehouseIndexAndDeliveryDistance.find(obj => parseInt(obj.deliveryDistance) === minDistance);
+                            console.log('objj', objj)
+                            minDistanceIndex = objj.warehouseIndex;
+                        } else {
+                            minDistanceIndex = wirehouseDistances.indexOf(minDistance);
+                            
+                        }
+                        nearestWirehouse = wirehouseDetails[minDistanceIndex];
+                        console.log('minDistance', minDistance)
+                        console.log('minDistanceIndex', minDistanceIndex)
+                        
                         console.log('nearestWirehouse', nearestWirehouse)
 
                         var pickupStartTime = nearestWirehouse.pickupTimeStart;
@@ -409,7 +487,7 @@ async function checkPin(req, res) {
                         //     }
 
                         // } 
-                        console.log('isBetween', time.isBetween(beforeTime, afterTime))
+
                         if (time.isBetween(beforeTime, afterTime)) {
                             var remainingMinute = 60 - curMinute;
                             responseText2 = "order withen " + remainingMinute + ' minutes';
@@ -469,8 +547,7 @@ async function checkPin(req, res) {
                     } else {
                         let result = {
                             status: 'false',
-                            message: 'Product not available',
-                            //productResponseData:  productResponseData
+                            message: 'Product not available'
                         };
                         res.json(result);
                     }
@@ -505,39 +582,6 @@ async function checkPin(req, res) {
     }
 }
 
-// async function generateShipRocketToken(username, password) {
-//     try {
-//         if (username != "" && password != "") {
-//             var apiUrl = "https://apiv2.shiprocket.in/v1/external/auth/login";
-//             var requestData = {
-//                 "email": username,
-//                 "password": password
-//             }
-//             const tokenResponce = await axios.post(apiUrl, requestData);
-//             if (tokenResponce.status == 200) {
-//                 if (tokenResponce.data && tokenResponce.data.token) {
-//                     var result = {
-//                         status: "success",
-//                         token: tokenResponce.data.token
-//                     };
-//                     return Promise.resolve(result)
-//                 } else {
-//                     throw new Error("TOKEN NOT FOUND");
-//                 }
-//             } else {
-//                 throw new Error("TOKEN NOT FOUND");
-//             }
-//         } else {
-//             throw new Error("INVALID USERNAME AND PASSWORD");
-//         }
-//     } catch (error) {
-//         var result = {
-//             status: "fail",
-//             message: error.message
-//         };
-//         return Promise.resolve(result)
-//     }
-// }
 module.exports = {
     checkPin
 }

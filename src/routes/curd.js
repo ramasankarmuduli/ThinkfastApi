@@ -18,5 +18,6 @@ router.put('/store/doc', controllers.common.updateDoc);
 router.delete('/store/doc/:id', controllers.common.deleteDocById);
 
 router.post('/store/customer/type', controllers.store.checkExistingCustomer);
+router.post('/sink-wirehouse', controllers.store.sinkWirehouse);
 
 module.exports = router;
