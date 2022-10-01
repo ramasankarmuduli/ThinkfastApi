@@ -490,7 +490,7 @@ async function checkPin(req, res) {
 
                         if (time.isBetween(beforeTime, afterTime)) {
                             var remainingMinute = 60 - curMinute;
-                            responseText2 = "order withen " + remainingMinute + ' minutes';
+                            responseText2 = "order withen <strong>" + remainingMinute + ' minutes</strong>';
                             console.log('is between pickup start and end time');
 
                             if (selecteZone.shippingTime == '24 Hours') {
@@ -502,7 +502,7 @@ async function checkPin(req, res) {
                             }
                         } else if (time.isAfter(afterTime)) {
                             console.log('After pickup time')
-                            responseText2 = "order now";
+                            responseText2 = "order <strong>now</strong>";
 
                             if (selecteZone.shippingTime == '24 Hours') {
                                 deliverTime = "tomorrow";
@@ -517,7 +517,7 @@ async function checkPin(req, res) {
                             }
                         } else {
                             console.log('is not between')
-                            responseText2 = "order now";
+                            responseText2 = "order <strong>now</strong>";
 
                             if (selecteZone.shippingTime == '24 Hours') {
                                 deliverTime = "today";
@@ -528,7 +528,7 @@ async function checkPin(req, res) {
                             }
                         }
 
-                        let responseText1 = "Fastest " + selecteZone.paymentStaus.toLowerCase() + " delivery " + deliverTime;
+                        let responseText1 = "Fastest " + selecteZone.paymentStaus.toLowerCase() + " delivery <strong>" + deliverTime + "</strong>";
 
                         let responseData = {
                             responseText1: responseText1,
