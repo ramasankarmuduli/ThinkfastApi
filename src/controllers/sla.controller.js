@@ -170,7 +170,7 @@ async function checkPin(req, res) {
             // })
 
             let courierStatus = false;
-
+            //console.log('courierType', courierType)
             for (let index = 0; index < courierType.length; index++) {
                 const courier = courierType[index];
                 if (courier.type == "delhivery" && courier.token != "") {
@@ -244,7 +244,8 @@ async function checkPin(req, res) {
                                 "Authorization": "Bearer " + courier.token
                             }
                         });
-                        if (shiprocketResponse.status == 200) {
+                        //console.log('shiprocketResponse', shiprocketResponse)
+                        if (shiprocketResponse.status == 200 && shiprocketResponse.data.status == 200) {
                             courierStatus = true;
                             break;
                         }
@@ -312,7 +313,7 @@ async function checkPin(req, res) {
                                 });
                                 if (locationInventoryResponse.status == 200) {
                                     var inventoryLevels = locationInventoryResponse.data.inventory_levels;
-                                    console.log('inventoryLevels', inventoryLevels)
+                                    //console.log('inventoryLevels', inventoryLevels)
                                     if (inventoryLevels.some(il => il.inventory_item_id === selectedVariant.inventory_item_id && il.available > 0)) {
                                         inventoryStatus = true;
                                         locationWiseWarehouseIndexAndProductAvailable.push({
@@ -547,6 +548,7 @@ async function checkPin(req, res) {
                     } else {
                         let result = {
                             status: 'false',
+                            errorType: 1,
                             message: 'Product not available'
                         };
                         res.json(result);
@@ -554,6 +556,7 @@ async function checkPin(req, res) {
                 } else {
                     let result = {
                         status: 'false',
+                        errorType: 1,
                         message: 'Product not found'
                     };
                     res.json(result);
@@ -561,6 +564,7 @@ async function checkPin(req, res) {
             } else {
                 let result = {
                     status: 'false',
+                    errorType: 1,
                     message: 'We are sorry, we can not deliver at this location.'
                 };
                 res.json(result);
@@ -568,6 +572,7 @@ async function checkPin(req, res) {
         } else {
             let result = {
                 status: 'false',
+                errorType: 2,
                 message: 'Invalid pin code, please try with correct pin code.'
             };
             res.json(result);
@@ -576,6 +581,7 @@ async function checkPin(req, res) {
         console.error(error);
         let result = {
             status: 'false',
+            errorType: 3,
             message: 'Invalid pin code, please try with correct pin code.'
         };
         res.json(result);
