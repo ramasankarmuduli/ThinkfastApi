@@ -20,5 +20,6 @@ router.delete('/store/doc/:id', controllers.common.deleteDocById);
 router.post('/store/customer/type', controllers.store.checkExistingCustomer);
 router.post('/sink-wirehouse', controllers.store.sinkWirehouse);
 router.post('/cart', controllers.store.createCart);
+router.post('/discount-code', controllers.store.getDiscountCodes);
 
 module.exports = router;

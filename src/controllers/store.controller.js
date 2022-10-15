@@ -386,9 +386,77 @@ async function createCart(req, res) {
     res.json(result);
   }
 }
+/**
+ * Fetching discount codes from shopify store.
+ * @param {*} req 
+ * @param {*} res 
+ */
+async function getDiscountCodes(req, res) {
+  try {
+    //let pincode = req.body.pincode;
+    //let cartItems = req.body.cartItems;
+    let vendorId = req.body.vendorId;
+
+    /**
+     * Fetching shopify store api details from thinkfast database.
+     */
+    let storeapiCollection = "storeapi_" + vendorId;
+    const StoreapiModel = mongoose.model(storeapiCollection, models.Common);
+    const storeapiDetails = await StoreapiModel.find();
+    console.log("storeapiDetails", storeapiDetails);
+    let shopifyStoreUrl = storeapiDetails[0].shopifyStoreUrl;
+    let shopifyApiAccessToken = storeapiDetails[0].shopifyApiAccessToken;
+    let shopifyApiKey = storeapiDetails[0].shopifyApiKey;
+    let shopifyApiSecretKey = storeapiDetails[0].shopifyApiSecretKey;
+    let shopifyApiVersion = (storeapiDetails[0].shopifyApiVersion) ? storeapiDetails[0].shopifyApiVersion : "2022-07";
+    let trackInventoryLocationWise = (storeapiDetails[0].trackInventoryLocationWise) ? storeapiDetails[0].trackInventoryLocationWise : "No";
+      /**
+       * Fetching product details from shopify.
+       */
+      let priceRuleApiUrl = shopifyStoreUrl + "/admin/api/" + shopifyApiVersion + "/price_rules.json";
+      const priceRuleResponse = await axios.get(priceRuleApiUrl, {
+        headers: {
+          "X-Shopify-Access-Token": shopifyApiAccessToken
+        }
+      });
+      if (priceRuleResponse.status == 200) {
+        let priceRules = priceRuleResponse.data.price_rules;
+        console.log('priceRule', JSON.stringify(priceRules));
+        let resultData = [];
+        for (let index = 0; index < priceRules.length; index++) {
+          const priceRule = priceRules[index];
+          resultData.push({
+            id: priceRule.id,
+            valueType: priceRule.value_type,
+            value: priceRule.value,
+            code: priceRule.title
+          })
+        }
+        let result = {
+          status: 'success',
+          data: resultData
+        };
+        res.json(result);
+      } else {
+        let result = {
+          status: 'false',
+          message: 'Price rule not found'
+        };
+        res.json(result);
+      }
+  } catch (error) {
+    console.error(error);
+    let result = {
+        status: 'false',
+        message: error.message
+    };
+    res.json(result);
+  }
+}
 
 module.exports = {
   checkExistingCustomer,
   sinkWirehouse,
-  createCart
+  createCart,
+  getDiscountCodes
 }
