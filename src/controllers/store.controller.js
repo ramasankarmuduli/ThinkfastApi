@@ -242,8 +242,8 @@ async function createCart(req, res) {
             inventoryStatus = true;
           }
         }
-        
-        if(inventoryStatus) {
+
+        if (inventoryStatus) {
           lineItems.push({
             'quantity': quantity,
             'merchandiseId': selectedVariant['admin_graphql_api_id']
@@ -352,8 +352,10 @@ async function createCart(req, res) {
     console.log('settings', settings)
     //const cartResponce = await axios.post(settings);
     const cartResponce = await axios(settings);
-    if(cartResponce) {      
+    if (cartResponce) {
       const cartDetails = cartResponce.data.data.cartCreate.cart;
+
+      console.log('cartDetails', cartDetails)
       const cartCostDetails = cartDetails.cost;
       const cartResponceLineItems = cartDetails.lines.edges;
       finalResponce.cartId = cartDetails.id;
@@ -363,7 +365,7 @@ async function createCart(req, res) {
       finalResponce.totalAmount = cartCostDetails.totalAmount;
       finalResponce.totalTaxAmount = cartCostDetails.totalTaxAmount;
       finalResponce.totalDutyAmount = cartCostDetails.totalDutyAmount;
-    
+
       for (let index = 0; index < cartResponceLineItems.length; index++) {
         const cartResponceLineItem = cartResponceLineItems[index];
         finalResponce.lineItems[index].cartItemId = cartResponceLineItem.node.id;
@@ -380,12 +382,309 @@ async function createCart(req, res) {
   } catch (error) {
     console.error(error);
     let result = {
-        status: 'false',
-        message: error.message
+      status: 'false',
+      message: error.message
     };
     res.json(result);
   }
 }
+
+async function updateCart(req, res) {
+  let cartId = req.body.cartId;
+  let cartItemId = req.body.cartItemId;
+  let quantity = parseInt(req.body.quantity);
+  try {
+    let mutation = `mutation {
+      cartLinesUpdate(
+        cartId: "${cartId}"
+        lines: {
+          id: "${cartItemId}"
+          quantity: ${quantity}
+        }
+      ) {
+        cart {
+          id
+          lines(first: 10) {
+            edges {
+              node {
+                id
+                quantity
+                merchandise {
+                  ... on ProductVariant {
+                    id
+                  }
+                }
+              }
+            }
+          }
+          cost {
+            totalAmount {
+              amount
+              currencyCode
+            }
+            subtotalAmount {
+              amount
+              currencyCode
+            }
+            totalTaxAmount {
+              amount
+              currencyCode
+            }
+            totalDutyAmount {
+              amount
+              currencyCode
+            }
+          }
+        }
+      }
+    }
+    `;
+
+    let settings = {
+      'async': true,
+      'crossDomain': true,
+      'url': 'https://fstout.myshopify.com/api/2022-07/graphql.json',
+      'method': 'POST',
+      'headers': {
+        'X-Shopify-Storefront-Access-Token': '0e44f98e0be4bf09f6af3785ef47f76a',
+        'Content-Type': 'application/graphql',
+      },
+      'data': mutation
+    };
+
+    //console.log('settings', settings)
+    const cartResponce = await axios(settings);
+    let finalResponce = {
+      cartId: "",
+      subtotalAmount: "",
+      totalTaxAmount: "",
+      totalDutyAmount: "",
+      totalAmount: "",
+      lineItems: []
+    };
+    //console.log('cartResponce', JSON.stringify(cartResponce.data.data))
+    if (cartResponce) {
+      const cartDetails = cartResponce.data.data.cartLinesUpdate.cart;
+      const cartCostDetails = cartDetails.cost;
+      const cartResponceLineItems = cartDetails.lines.edges;
+      finalResponce.cartId = cartDetails.id;
+      finalResponce.subtotalAmount = cartCostDetails.subtotalAmount;
+      finalResponce.totalAmount = cartCostDetails.totalAmount;
+      finalResponce.totalTaxAmount = cartCostDetails.totalTaxAmount;
+      finalResponce.totalDutyAmount = cartCostDetails.totalDutyAmount;
+      var lineItems = [];
+      for (let index = 0; index < cartResponceLineItems.length; index++) {
+        const cartResponceLineItem = cartResponceLineItems[index];
+        lineItems.push({
+          "cartItemId": cartResponceLineItem['node']['id'],
+          "itemQuantity": cartResponceLineItem['node']['quantity'],
+          "productVariantId": cartResponceLineItem['node']['merchandise']['id']
+        })
+      }
+      finalResponce.lineItems = lineItems;
+    }
+    let result = {
+      status: 'success',
+      message: '',
+      data: finalResponce
+    };
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    let result = {
+      status: 'false',
+      message: error.message
+    };
+    res.json(result);
+  }
+}
+
+async function retrieveCheckoutURL(req, res) {
+  let cartId = req.body.cartId;
+  try {
+    let mutation = `query checkoutURL {
+      cart(id: "${cartId}") {
+        checkoutUrl
+      }
+    }
+    `;
+
+    let settings = {
+      'async': true,
+      'crossDomain': true,
+      'url': 'https://fstout.myshopify.com/api/2022-07/graphql.json',
+      'method': 'POST',
+      'headers': {
+        'X-Shopify-Storefront-Access-Token': '0e44f98e0be4bf09f6af3785ef47f76a',
+        'Content-Type': 'application/graphql',
+      },
+      'data': mutation
+    };
+
+    //console.log('settings', settings)
+    const cartResponce = await axios(settings);
+    let finalResponce = {
+      cartId: "",
+      subtotalAmount: "",
+      totalTaxAmount: "",
+      totalDutyAmount: "",
+      totalAmount: "",
+      lineItems: []
+    };
+    console.log('cartResponce', JSON.stringify(cartResponce.data.data))
+    // if (cartResponce) {
+    //   const cartDetails = cartResponce.data.data.cartLinesUpdate.cart;
+    //   const cartCostDetails = cartDetails.cost;
+    //   const cartResponceLineItems = cartDetails.lines.edges;
+    //   finalResponce.cartId = cartDetails.id;
+    //   finalResponce.subtotalAmount = cartCostDetails.subtotalAmount;
+    //   finalResponce.totalAmount = cartCostDetails.totalAmount;
+    //   finalResponce.totalTaxAmount = cartCostDetails.totalTaxAmount;
+    //   finalResponce.totalDutyAmount = cartCostDetails.totalDutyAmount;
+    //   var lineItems = [];
+    //   for (let index = 0; index < cartResponceLineItems.length; index++) {
+    //     const cartResponceLineItem = cartResponceLineItems[index];
+    //     lineItems.push({
+    //       "cartItemId": cartResponceLineItem['node']['id'],
+    //       "itemQuantity": cartResponceLineItem['node']['quantity'],
+    //       "productVariantId": cartResponceLineItem['node']['merchandise']['id']
+    //     })
+    //   }
+    //   finalResponce.lineItems = lineItems;
+    // }
+    let result = {
+      status: 'success',
+      message: '',
+      data: finalResponce
+    };
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    let result = {
+      status: 'false',
+      message: error.message
+    };
+    res.json(result);
+  }
+}
+
+async function updateCartDiscount(req, res) {
+  let cartId = req.body.cartId;
+  let discountCode = req.body.discountCode;
+  try {
+    let mutation = `mutation {
+      cartDiscountCodesUpdate(
+        cartId: "${cartId}"
+        discountCodes: [
+          "${discountCode}"
+        ]
+      ) {
+        cart {
+          id
+          discountCodes {
+            code
+            applicable
+          }
+          discountAllocations {
+            discountedAmount {
+              amount
+            }
+          }
+          lines(first: 10) {
+            edges {
+              node {
+                id
+                quantity
+                merchandise {
+                  ... on ProductVariant {
+                    id
+                  }
+                }
+              }
+            }
+          }
+          cost {
+            totalAmount {
+              amount
+              currencyCode
+            }
+            subtotalAmount {
+              amount
+              currencyCode
+            }
+            totalTaxAmount {
+              amount
+              currencyCode
+            }
+            totalDutyAmount {
+              amount
+              currencyCode
+            }
+          }
+        }
+      }
+    }
+    `;
+
+    let settings = {
+      'async': true,
+      'crossDomain': true,
+      'url': 'https://fstout.myshopify.com/api/2022-07/graphql.json',
+      'method': 'POST',
+      'headers': {
+        'X-Shopify-Storefront-Access-Token': '0e44f98e0be4bf09f6af3785ef47f76a',
+        'Content-Type': 'application/graphql',
+      },
+      'data': mutation
+    };
+
+    //console.log('settings', settings)
+    const cartResponce = await axios(settings);
+    let finalResponce = {
+      cartId: "",
+      subtotalAmount: "",
+      totalTaxAmount: "",
+      totalDutyAmount: "",
+      totalAmount: "",
+      lineItems: []
+    };
+    console.log('cartResponce', JSON.stringify(cartResponce.data.data))
+    // if (cartResponce) {
+    //   const cartDetails = cartResponce.data.data.cartLinesUpdate.cart;
+    //   const cartCostDetails = cartDetails.cost;
+    //   const cartResponceLineItems = cartDetails.lines.edges;
+    //   finalResponce.cartId = cartDetails.id;
+    //   finalResponce.subtotalAmount = cartCostDetails.subtotalAmount;
+    //   finalResponce.totalAmount = cartCostDetails.totalAmount;
+    //   finalResponce.totalTaxAmount = cartCostDetails.totalTaxAmount;
+    //   finalResponce.totalDutyAmount = cartCostDetails.totalDutyAmount;
+    //   var lineItems = [];
+    //   for (let index = 0; index < cartResponceLineItems.length; index++) {
+    //     const cartResponceLineItem = cartResponceLineItems[index];
+    //     lineItems.push({
+    //       "cartItemId": cartResponceLineItem['node']['id'],
+    //       "itemQuantity": cartResponceLineItem['node']['quantity'],
+    //       "productVariantId": cartResponceLineItem['node']['merchandise']['id']
+    //     })
+    //   }
+    //   finalResponce.lineItems = lineItems;
+    // }
+    let result = {
+      status: 'success',
+      message: '',
+      data: finalResponce
+    };
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    let result = {
+      status: 'false',
+      message: error.message
+    };
+    res.json(result);
+  }
+}
+
 /**
  * Fetching discount codes from shopify store.
  * @param {*} req 
@@ -410,45 +709,45 @@ async function getDiscountCodes(req, res) {
     let shopifyApiSecretKey = storeapiDetails[0].shopifyApiSecretKey;
     let shopifyApiVersion = (storeapiDetails[0].shopifyApiVersion) ? storeapiDetails[0].shopifyApiVersion : "2022-07";
     let trackInventoryLocationWise = (storeapiDetails[0].trackInventoryLocationWise) ? storeapiDetails[0].trackInventoryLocationWise : "No";
-      /**
-       * Fetching product details from shopify.
-       */
-      let priceRuleApiUrl = shopifyStoreUrl + "/admin/api/" + shopifyApiVersion + "/price_rules.json";
-      const priceRuleResponse = await axios.get(priceRuleApiUrl, {
-        headers: {
-          "X-Shopify-Access-Token": shopifyApiAccessToken
-        }
-      });
-      if (priceRuleResponse.status == 200) {
-        let priceRules = priceRuleResponse.data.price_rules;
-        console.log('priceRule', JSON.stringify(priceRules));
-        let resultData = [];
-        for (let index = 0; index < priceRules.length; index++) {
-          const priceRule = priceRules[index];
-          resultData.push({
-            id: priceRule.id,
-            valueType: priceRule.value_type,
-            value: priceRule.value,
-            code: priceRule.title
-          })
-        }
-        let result = {
-          status: 'success',
-          data: resultData
-        };
-        res.json(result);
-      } else {
-        let result = {
-          status: 'false',
-          message: 'Price rule not found'
-        };
-        res.json(result);
+    /**
+     * Fetching product details from shopify.
+     */
+    let priceRuleApiUrl = shopifyStoreUrl + "/admin/api/" + shopifyApiVersion + "/price_rules.json";
+    const priceRuleResponse = await axios.get(priceRuleApiUrl, {
+      headers: {
+        "X-Shopify-Access-Token": shopifyApiAccessToken
       }
+    });
+    if (priceRuleResponse.status == 200) {
+      let priceRules = priceRuleResponse.data.price_rules;
+      console.log('priceRule', JSON.stringify(priceRules));
+      let resultData = [];
+      for (let index = 0; index < priceRules.length; index++) {
+        const priceRule = priceRules[index];
+        resultData.push({
+          id: priceRule.id,
+          valueType: priceRule.value_type,
+          value: priceRule.value,
+          code: priceRule.title
+        })
+      }
+      let result = {
+        status: 'success',
+        data: resultData
+      };
+      res.json(result);
+    } else {
+      let result = {
+        status: 'false',
+        message: 'Price rule not found'
+      };
+      res.json(result);
+    }
   } catch (error) {
     console.error(error);
     let result = {
-        status: 'false',
-        message: error.message
+      status: 'false',
+      message: error.message
     };
     res.json(result);
   }
@@ -458,5 +757,8 @@ module.exports = {
   checkExistingCustomer,
   sinkWirehouse,
   createCart,
-  getDiscountCodes
+  getDiscountCodes,
+  updateCart,
+  retrieveCheckoutURL,
+  updateCartDiscount
 }
