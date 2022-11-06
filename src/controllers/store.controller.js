@@ -2,6 +2,7 @@ const models = require('../models');
 const mongoose = require('mongoose');
 const argon2 = require("argon2");
 const jwt = require("jsonwebtoken");
+const moment = require('moment/moment');
 const axios = require('axios').default;
 
 async function checkExistingCustomer(req, res) {
@@ -649,26 +650,39 @@ async function updateCartDiscount(req, res) {
       lineItems: []
     };
     console.log('cartResponce', JSON.stringify(cartResponce.data.data))
-    // if (cartResponce) {
-    //   const cartDetails = cartResponce.data.data.cartLinesUpdate.cart;
-    //   const cartCostDetails = cartDetails.cost;
-    //   const cartResponceLineItems = cartDetails.lines.edges;
-    //   finalResponce.cartId = cartDetails.id;
-    //   finalResponce.subtotalAmount = cartCostDetails.subtotalAmount;
-    //   finalResponce.totalAmount = cartCostDetails.totalAmount;
-    //   finalResponce.totalTaxAmount = cartCostDetails.totalTaxAmount;
-    //   finalResponce.totalDutyAmount = cartCostDetails.totalDutyAmount;
-    //   var lineItems = [];
-    //   for (let index = 0; index < cartResponceLineItems.length; index++) {
-    //     const cartResponceLineItem = cartResponceLineItems[index];
-    //     lineItems.push({
-    //       "cartItemId": cartResponceLineItem['node']['id'],
-    //       "itemQuantity": cartResponceLineItem['node']['quantity'],
-    //       "productVariantId": cartResponceLineItem['node']['merchandise']['id']
-    //     })
-    //   }
-    //   finalResponce.lineItems = lineItems;
-    // }
+    if (cartResponce) {
+      var discountedAmount = 0;
+      const cartDetailsAfterDiscount = cartResponce.data.data.cartDiscountCodesUpdate.cart;
+      var isCardApplied = false;
+      if(cartDetailsAfterDiscount.discountCodes && cartDetailsAfterDiscount.discountCodes[0].applicable) {
+        isCardApplied = true;
+        var discountAllocations = cartDetailsAfterDiscount.discountAllocations;
+        for (let index = 0; index < discountAllocations.length; index++) {
+          const discountAllocation = discountAllocations[index];
+          discountedAmount = discountedAmount + parseInt(discountAllocation.discountedAmount.amount); 
+        }
+      }
+      const cartCostDetails = cartDetailsAfterDiscount.cost;
+      finalResponce.cartId = cartDetailsAfterDiscount.id;
+      finalResponce.isCardApplied = isCardApplied;
+      finalResponce.discountedAmount = discountedAmount;
+      finalResponce.subtotalAmount = cartCostDetails.subtotalAmount;
+      finalResponce.totalAmount = cartCostDetails.totalAmount;
+      finalResponce.totalTaxAmount = cartCostDetails.totalTaxAmount;
+      finalResponce.totalDutyAmount = cartCostDetails.totalDutyAmount;
+
+
+      // var lineItems = [];
+      // for (let index = 0; index < cartResponceLineItems.length; index++) {
+      //   const cartResponceLineItem = cartResponceLineItems[index];
+      //   lineItems.push({
+      //     "cartItemId": cartResponceLineItem['node']['id'],
+      //     "itemQuantity": cartResponceLineItem['node']['quantity'],
+      //     "productVariantId": cartResponceLineItem['node']['merchandise']['id']
+      //   })
+      // }
+      // finalResponce.lineItems = lineItems;
+    }
     let result = {
       status: 'success',
       message: '',
@@ -692,17 +706,13 @@ async function updateCartDiscount(req, res) {
  */
 async function getDiscountCodes(req, res) {
   try {
-    //let pincode = req.body.pincode;
-    //let cartItems = req.body.cartItems;
     let vendorId = req.body.vendorId;
-
     /**
      * Fetching shopify store api details from thinkfast database.
      */
     let storeapiCollection = "storeapi_" + vendorId;
     const StoreapiModel = mongoose.model(storeapiCollection, models.Common);
     const storeapiDetails = await StoreapiModel.find();
-    console.log("storeapiDetails", storeapiDetails);
     let shopifyStoreUrl = storeapiDetails[0].shopifyStoreUrl;
     let shopifyApiAccessToken = storeapiDetails[0].shopifyApiAccessToken;
     let shopifyApiKey = storeapiDetails[0].shopifyApiKey;
@@ -710,9 +720,14 @@ async function getDiscountCodes(req, res) {
     let shopifyApiVersion = (storeapiDetails[0].shopifyApiVersion) ? storeapiDetails[0].shopifyApiVersion : "2022-07";
     let trackInventoryLocationWise = (storeapiDetails[0].trackInventoryLocationWise) ? storeapiDetails[0].trackInventoryLocationWise : "No";
     /**
-     * Fetching product details from shopify.
+     * Fetching discount details from shopify.
      */
+
+    //currentDate = moment();
+    //console.log('currentDate', currentDate)
+    //console.log('currentDate',  String(currentDate))
     let priceRuleApiUrl = shopifyStoreUrl + "/admin/api/" + shopifyApiVersion + "/price_rules.json";
+    console.log('priceRuleApiUrl', priceRuleApiUrl)
     const priceRuleResponse = await axios.get(priceRuleApiUrl, {
       headers: {
         "X-Shopify-Access-Token": shopifyApiAccessToken
@@ -723,13 +738,42 @@ async function getDiscountCodes(req, res) {
       console.log('priceRule', JSON.stringify(priceRules));
       let resultData = [];
       for (let index = 0; index < priceRules.length; index++) {
-        const priceRule = priceRules[index];
-        resultData.push({
-          id: priceRule.id,
-          valueType: priceRule.value_type,
-          value: priceRule.value,
-          code: priceRule.title
-        })
+        const priceRule = priceRules[index];   
+        if(priceRule.ends_at == null) {
+          resultData.push({
+            id: priceRule.id,
+            valueType: priceRule.value_type,
+            value: priceRule.value,
+            code: priceRule.title,
+            starts_at: priceRule.starts_at,
+            ends_at: priceRule.ends_at,
+            target_type: priceRule.target_type,
+            target_selection: priceRule.target_selection,
+            entitled_collection_ids: priceRule.entitled_collection_ids,
+            entitled_product_ids: priceRule.entitled_product_ids,
+            entitled_variant_ids: priceRule.entitled_variant_ids,
+            prerequisite_subtotal_range: priceRule.prerequisite_subtotal_range
+          })
+        } else {
+          var curTime = moment(moment().utcOffset("+05:30").format("YYYY-MM-DD HH:mm:ss"));
+          var couponExpireTime = moment(moment(priceRule.ends_at).format('YYYY-MM-DD HH:mm:ss'));
+          if(curTime.isBefore(couponExpireTime)) {
+            resultData.push({
+              id: priceRule.id,
+              valueType: priceRule.value_type,
+              value: priceRule.value,
+              code: priceRule.title,
+              starts_at: priceRule.starts_at,
+              ends_at: priceRule.ends_at,
+              target_type: priceRule.target_type,
+              target_selection: priceRule.target_selection,
+              entitled_collection_ids: priceRule.entitled_collection_ids,
+              entitled_product_ids: priceRule.entitled_product_ids,
+              entitled_variant_ids: priceRule.entitled_variant_ids,
+              prerequisite_subtotal_range: priceRule.prerequisite_subtotal_range
+            })
+          }
+        }
       }
       let result = {
         status: 'success',
